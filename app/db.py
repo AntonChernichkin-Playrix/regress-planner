@@ -3,7 +3,10 @@ import os
 from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
-_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+# Путь к БД: переменная окружения DATABASE_PATH (для Railway Volume),
+# иначе — рядом с проектом в папке data/
+_default_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+_DATA_DIR = os.environ.get("DATA_DIR", _default_data_dir)
 os.makedirs(_DATA_DIR, exist_ok=True)
 DATABASE_URL = f"sqlite:///{os.path.join(_DATA_DIR, 'features.db')}"
 

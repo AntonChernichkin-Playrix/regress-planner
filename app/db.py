@@ -3,12 +3,23 @@ import os
 from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
-# Путь к БД: переменная окружения DATABASE_PATH (для Railway Volume),
+# Путь к БД: переменная окружения DATA_DIR (для Railway Volume),
 # иначе — рядом с проектом в папке data/
 _default_data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 _DATA_DIR = os.environ.get("DATA_DIR", _default_data_dir)
 os.makedirs(_DATA_DIR, exist_ok=True)
-DATABASE_URL = f"sqlite:///{os.path.join(_DATA_DIR, 'features.db')}"
+
+_DB_PATH = os.path.join(_DATA_DIR, "features.db")
+
+# Если БД ещё не существует (первый запуск на Railway Volume),
+# копируем семенную БД из репозитория
+if not os.path.exists(_DB_PATH):
+    import shutil
+    _SEED = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data_seed", "features.db")
+    if os.path.exists(_SEED):
+        shutil.copy2(_SEED, _DB_PATH)
+
+DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
 connect_args = {"check_same_thread": False}
 engine = create_engine(DATABASE_URL, connect_args=connect_args)

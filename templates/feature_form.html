@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if feature %}Редактирование{% else %}Новая фича{% endif %}{% endblock %}
+{% block nav_features %}active{% endblock %}
+{% block body %}
+<h1>{% if feature %}Редактировать фичу{% else %}Новая фича{% endif %}</h1>
+{% if error %}
+<div class="alert-error">
+  <span>⚠</span> {{ error }}
+</div>
+{% endif %}
+<div class="card">
+  <form method="post" enctype="application/x-www-form-urlencoded"
+    action="{% if feature %}{{ request.url_for('update_feature', feature_id=feature.id) }}{% else %}{{ request.url_for('create_feature') }}{% endif %}">
+    <div class="field">
+      <label for="f-team">Команда</label>
+      <input type="text" id="f-team" name="team" maxlength="120"
+        placeholder="например Core, Mobile" autocomplete="off"
+        value="{{ form_team if form_team is defined else (feature.team if feature else '') }}">
+    </div>
+    <div class="field">
+      <label for="f-title">Название <span class="required">*</span></label>
+      <input type="text" id="f-title" name="feature_title" required maxlength="500" autocomplete="off"
+        value="{{ form_name if form_name is defined else (feature.name if feature else '') }}">
+    </div>
+    <div class="field">
+      <label for="f-scope">Нужен регресс в текущую версию?</label>
+      <select id="f-scope" name="regression_scope">
+        {% set cur_scope = form_regression_scope if form_regression_scope is defined else (feature.regression_scope if feature else "") %}
+        {% for val in scope_choices %}
+        <option value="{{ val }}" {% if cur_scope == val %}selected{% endif %}>{{ scope_labels[val] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-hours">Часов на проверку</label>
+      <input type="text" id="f-hours" name="check_hours" inputmode="decimal"
+        placeholder="например 2 или 0.5" autocomplete="off"
+        value="{{ form_check_hours if form_check_hours is defined else (feature.check_hours if feature else '0') }}">
+    </div>
+    <div class="field">
+      <label for="f-ref">Внешний id <span class="optional">(опционально)</span></label>
+      <input type="text" id="f-ref" name="external_ref" maxlength="200"
+        placeholder="ключ из другой системы" autocomplete="off"
+        value="{{ form_external_ref if form_external_ref is defined else (feature.external_ref if (feature and feature.external_ref) else '') }}">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <a class="btn" href="/features">К списку</a>
+      {% if feature %}
+      <button type="submit" class="btn btn-danger"
+        style="margin-left:auto"
+        formaction="/features/{{ feature.id }}/delete" formmethod="post" formnovalidate
+        onclick="return confirm('Удалить «' + document.getElementById('f-title').value + '»?');">Удалить</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}{% if device %}Редактировать устройство{% else %}Новое устройство{% endif %}{% endblock %}
+{% block nav_devices %}active{% endblock %}
+
+{% block head %}
+<style>
+  .card { max-width: 52rem; }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 1.5rem;
+  }
+  .form-grid .field-wide { grid-column: 1 / -1; }
+
+  input[type="number"], textarea {
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+    outline: none;
+  }
+  input[type="number"]:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(61,214,140,.18);
+  }
+  textarea { resize: vertical; min-height: 4rem; }
+
+  .checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+  }
+  .cb-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    user-select: none;
+  }
+  .cb-item input[type="checkbox"] {
+    width: 1rem; height: 1rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .radio-row {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+  }
+  .radio-row label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    font-weight: 400;
+    cursor: pointer;
+    margin-bottom: 0;
+  }
+  .radio-row input[type="radio"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    grid-column: 1 / -1;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<h1>{% if device %}Редактировать устройство{% else %}Добавить устройство{% endif %}</h1>
+
+{% if error %}
+<div class="alert-error">⚠ {{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="{% if device %}/devices/{{ device.id }}/edit{% else %}/devices/new{% endif %}">
+    <div class="form-grid">
+
+      <!-- ── Сотрудник / Устройство ── -->
+      <p class="section-title">Основное</p>
+
+      <div class="field">
+        <label>Сотрудник</label>
+        <input type="text" name="employee" value="{{ employee }}" placeholder="Иван Иванов"
+               list="employees-list" autocomplete="off">
+        <datalist id="employees-list">
+          {% for e in employees %}<option value="{{ e }}">{% endfor %}
+        </datalist>
+      </div>
+
+      <div class="field">
+        <label>Устройство</label>
+        <input type="text" name="device_name" value="{{ device_name }}" placeholder="Samsung Galaxy S23">
+      </div>
+
+      <div class="field">
+        <label>Инвентарный номер <span class="optional">(необязательно)</span></label>
+        <input type="text" name="inv_number" value="{{ inv_number }}">
+      </div>
+
+      <div class="field">
+        <label>Статус</label>
+        <input type="text" name="status" value="{{ status }}" placeholder="В работе / На складе …">
+      </div>
+
+      <!-- ── Характеристики ── -->
+      <p class="section-title">Характеристики</p>
+
+      <div class="field">
+        <label>Версия OS</label>
+        <input type="text" name="os_version" value="{{ os_version }}" placeholder="Android 14">
+      </div>
+
+      <div class="field">
+        <label>RAM, МБ <span class="optional">(необязательно)</span></label>
+        <input type="number" name="ram_mb" value="{{ ram_mb if ram_mb is not none else '' }}" min="0" step="1" placeholder="4096">
+      </div>
+
+      <div class="field">
+        <label>Класс производительности</label>
+        <input type="text" name="perf_class" value="{{ perf_class }}" placeholder="High / Mid / Low">
+      </div>
+
+      <!-- Root -->
+      <div class="field">
+        <label>Root</label>
+        <div class="radio-row">
+          <label><input type="radio" name="root" value="true"  {% if root == true  %}checked{% endif %}> Да</label>
+          <label><input type="radio" name="root" value="false" {% if root == false %}checked{% endif %}> Нет</label>
+          <label><input type="radio" name="root" value=""      {% if root is none  %}checked{% endif %}> —</label>
+        </div>
+      </div>
+
+      <!-- ASan -->
+      <div class="field">
+        <label>ASan</label>
+        <div class="radio-row">
+          <label><input type="radio" name="asan" value="true"  {% if asan == true  %}checked{% endif %}> Да</label>
+          <label><input type="radio" name="asan" value="false" {% if asan == false %}checked{% endif %}> Нет</label>
+          <label><input type="radio" name="asan" value=""      {% if asan is none  %}checked{% endif %}> —</label>
+        </div>
+      </div>
+
+      <!-- ── Профиль ── -->
+      <p class="section-title">Профиль</p>
+
+      <div class="field field-wide">
+        <div class="checkbox-group">
+          <label class="cb-item">
+            <input type="checkbox" name="profile_global"  {% if profile_global  %}checked{% endif %}>
+            <span style="background:#3b6fd4;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;">Г</span> Глобальный
+          </label>
+          <label class="cb-item">
+            <input type="checkbox" name="profile_china"   {% if profile_china   %}checked{% endif %}>
+            <span style="background:#e8a020;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;">К</span> Китайский
+          </label>
+          <label class="cb-item">
+            <input type="checkbox" name="profile_vietnam" {% if profile_vietnam %}checked{% endif %}>
+            <span style="background:#c0392b;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;">В</span> Вьетнам
+          </label>
+        </div>
+      </div>
+
+      <!-- ── Идентификаторы ── -->
+      <p class="section-title">Идентификаторы</p>
+
+      <div class="field field-wide">
+        <label>Ratio <span class="optional">(необязательно)</span></label>
+        <input type="text" name="ratio" value="{{ ratio }}">
+      </div>
+
+      <div class="field field-wide">
+        <label>UDID <span class="optional">(необязательно)</span></label>
+        <input type="text" name="udid" value="{{ udid }}">
+      </div>
+
+      <div class="field field-wide">
+        <label>S/N <span class="optional">(необязательно)</span></label>
+        <input type="text" name="serial" value="{{ serial }}">
+      </div>
+
+      <!-- ── Комментарий ── -->
+      <p class="section-title">Комментарий</p>
+
+      <div class="field field-wide">
+        <textarea name="comment" rows="3">{{ comment }}</textarea>
+      </div>
+
+    </div><!-- .form-grid -->
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">
+        {% if device %}Сохранить{% else %}Добавить{% endif %}
+      </button>
+      <a href="/devices" class="btn">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

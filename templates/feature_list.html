@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+{% block title %}Фичи{% endblock %}
+{% block nav_features %}active{% endblock %}
+{% block body %}
+<h1>Фичи регресса</h1>
+<div class="toolbar">
+  <a class="btn btn-primary" href="/features/new">+ Добавить фичу</a>
+  <div class="toolbar-right">
+    {% if features %}
+    <span class="stat-chip">Всего <strong>{{ features|length }}</strong></span>
+    {% set active = features | selectattr('regression_scope', 'in', ['yes', 'partial']) | list %}
+    <span class="stat-chip">Активно <strong>{{ active | length }}</strong></span>
+    <span class="stat-chip">Сумма часов (акт.) <strong id="sum-hours-val">{{ active | sum(attribute='effective_hours') | round(1) }} ч</strong></span>
+    {% endif %}
+  </div>
+</div>
+{% if features %}
+<div class="filter-bar">
+  <select id="team-filter" class="filter-select">
+    <option value="">Все команды</option>
+    {% for t in all_teams %}
+    <option value="{{ t }}">{{ t }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
+{% if not features %}
+<div class="empty-state">
+  <div class="empty-icon">📋</div>
+  <p>Список фич пуст. Добавьте первую фичу, чтобы начать планирование регресса.</p>
+  <a class="btn btn-primary" href="/features/new">+ Добавить фичу</a>
+</div>
+{% else %}
+<div class="table-wrap">
+<table id="features-table">
+  <thead>
+    <tr>
+      <th style="width:8rem">Команда</th>
+      <th>Название</th>
+      <th style="width:8rem">Регресс</th>
+      <th style="text-align:right;width:4rem">Время проверки, ч</th>
+      <th style="text-align:right;width:4rem" title="Опционально. Наивысший приоритет при расчётах">Текущая<br>версия, ч</th>
+      <th style="width:9rem">Qase</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% set prev_team = namespace(t=none) %}
+    {% for f in features %}
+    {% if f.team != prev_team.t %}
+      {% set prev_team.t = f.team %}
+      <tr class="team-group-row" data-team="{{ f.team or '' }}">
+        <td colspan="6" class="team-group-cell">{{ f.team or '— без команды —' }}</td>
+      </tr>
+    {% endif %}
+    <tr data-team="{{ f.team or '' }}">
+      <td>
+        <select class="team-select {% if f.team %}team-set{% endif %}"
+                data-id="{{ f.id }}"
+                data-current="{{ f.team or '' }}">
+          <option value="">— не указана —</option>
+          {% for t in all_teams %}
+          <option value="{{ t }}" {% if f.team == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+          {% if f.team and f.team not in all_teams %}
+          <option value="{{ f.team }}" selected>{{ f.team }}</option>
+          {% endif %}
+        </select>
+      </td>
+      <td>
+        <a href="/features/{{ f.id }}/edit">{{ f.name }}</a>
+      </td>
+      <td>
+        <select class="scope-select scope-select--{{ f.regression_scope or 'empty' }}"
+                data-id="{{ f.id }}"
+                data-current="{{ f.regression_scope or '' }}">
+          <option value=""       {% if not f.regression_scope %}selected{% endif %}>Не указано</option>
+          <option value="yes"    {% if f.regression_scope == 'yes' %}selected{% endif %}>Да</option>
+          <option value="partial"{% if f.regression_scope == 'partial' %}selected{% endif %}>Частично</option>
+          <option value="no"     {% if f.regression_scope == 'no' %}selected{% endif %}>Нет</option>
+        </select>
+      </td>
+      <td class="num">
+        <input class="base-h-input"
+               type="text" inputmode="decimal"
+               data-id="{{ f.id }}"
+               data-current="{{ f.check_hours }}"
+               value="{{ f.check_hours | fmtnum }}"
+               aria-label="Часов для {{ f.name }}">
+      </td>
+      <td class="num">
+        <input class="ovr-input {% if f.override_hours is not none %}ovr-set{% endif %}"
+               type="text" inputmode="decimal"
+               data-id="{{ f.id }}"
+               data-base="{{ f.check_hours }}"
+               data-current="{{ f.override_hours if f.override_hours is not none else '' }}"
+               value="{{ f.override_hours | fmtnum if f.override_hours is not none else '' }}"
+               placeholder="—"
+               aria-label="Часов (в эту версию) для {{ f.name }}">
+      </td>
+      <td class="qase-cell" style="max-width:9rem">
+        <span class="qase-display"></span>
+        <input class="qase-input" type="url" data-id="{{ f.id }}"
+               data-current="{{ f.qase_url or '' }}"
+               value="{{ f.qase_url or '' }}"
+               placeholder="https://app.qase.io/…"
+               style="display:none">
+      </td>
+      <td class="td-actions">
+        <div class="row-actions" style="flex-direction:column;align-items:stretch;gap:0.3rem">
+          <a class="btn btn-sm btn-icon" href="/features/{{ f.id }}/edit" title="Изменить">✏️</a>
+          <form method="post" action="/features/{{ f.id }}/delete"
+            onsubmit="return confirm('Удалить «{{ f.name }}»? Это действие нельзя отменить.');">
+            <button type="submit" class="btn btn-sm btn-danger btn-icon" title="Удалить">✕</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<style>
+/* ── Фильтр по команде ── */
+.filter-bar {
+  margin-bottom: 0.75rem;
+}
+.filter-select {
+  appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  padding: 0.35rem 2rem 0.35rem 0.75rem;
+  outline: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b8aaa' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 10px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.filter-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+.filter-select option { background: var(--surface); }
+
+/* ── Разделитель групп команд ── */
+.team-group-row { pointer-events: none; }
+.team-group-cell {
+  padding: 0.3rem 0.5rem !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(61,214,140,.06);
+  border-top: 1px solid rgba(61,214,140,.15);
+}
+
+/* ── Уменьшенные отступы в ячейках только для этой таблицы ── */
+/* ── Комментарий ── */
+.comment-cell { min-width: 8rem; max-width: 18rem; }
+.comment-input {
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s, color .15s;
+}
+.comment-input::placeholder { color: var(--muted); opacity: 0.35; }
+.comment-input:hover  { border-color: var(--border); background: var(--bg); }
+.comment-input:focus  { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(61,214,140,.18); color: var(--text); }
+.comment-input.has-value { color: var(--text); }
+.comment-input.saving { opacity: .5; pointer-events: none; }
+.comment-input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 3px rgba(240,82,82,.25) !important; }
+
+/* ── Инлайн-выбор команды ── */
+.team-select {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s, box-shadow .15s;
+}
+.team-select:hover { border-color: var(--border); background: var(--bg); }
+.team-select:focus { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(61,214,140,.18); color: var(--text); }
+.team-select.team-set { color: var(--text); font-weight: 500; }
+.team-select option { background: var(--surface); color: var(--text); }
+.team-select.saving { opacity: .5; pointer-events: none; }
+.team-select.save-error { box-shadow: 0 0 0 3px rgba(240,82,82,.35) !important; }
+
+/* Уменьшенные отступы в ячейках только для этой таблицы */
+.table-wrap table th { padding: 0.35rem 0.5rem; }
+.table-wrap table td { padding: 0.3rem 0.5rem; }
+
+.scope-select {
+  appearance: none;
+  border-radius: 999px;
+  padding: 0.22rem 1.8rem 0.22rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  outline: none;
+  transition: opacity .15s, box-shadow .15s;
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 10px;
+  min-width: 0;
+  max-width: 8rem;
+}
+.scope-select:focus { box-shadow: 0 0 0 3px rgba(61,214,140,.2); }
+.scope-select--empty {
+  background-color: transparent;
+  color: #6b8aaa;
+  border-color: #1e3550;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b8aaa' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.scope-select--yes {
+  background-color: rgba(61,214,140,.15);
+  color: #3dd68c;
+  border-color: rgba(61,214,140,.35);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%233dd68c' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.scope-select--partial {
+  background-color: rgba(251,191,36,.12);
+  color: #fbbf24;
+  border-color: rgba(251,191,36,.35);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23fbbf24' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.scope-select--no {
+  background-color: rgba(156,163,175,.1);
+  color: #9ca3af;
+  border-color: rgba(156,163,175,.25);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.scope-select.saving { opacity: .5; pointer-events: none; }
+.scope-select.save-error { box-shadow: 0 0 0 3px rgba(240,82,82,.35); }
+.btn-icon { width: 2rem; height: 2rem; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+</style>
+
+<style>
+/* ── Инлайн-поле «Часов» (базовые) ── */
+.base-h-input {
+  width: 3.5rem;
+  text-align: right;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.base-h-input:hover  { border-color: var(--border); background: var(--bg); }
+.base-h-input:focus  { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+.base-h-input.base-h-error { border-color: var(--danger) !important; box-shadow: 0 0 0 3px rgba(240,82,82,.25) !important; }
+.base-h-input.saving { opacity: .5; pointer-events: none; }
+
+/* ── Инлайн-поля «Часов - короткий» и «Часов (в эту версию)» — общие стили ── */
+.short-h-input,
+.ovr-input {
+  width: 3.5rem;
+  text-align: right;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s, color .15s;
+}
+.short-h-input::placeholder, .ovr-input::placeholder { color: var(--muted); opacity: 0.5; }
+.short-h-input:hover, .ovr-input:hover { border-color: var(--border); background: var(--bg); }
+.short-h-input:focus, .ovr-input:focus { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+.short-h-input.ovr-set, .ovr-input.ovr-set { color: var(--accent); font-weight: 600; }
+.short-h-input.ovr-error, .ovr-input.ovr-error { border-color: var(--danger) !important; box-shadow: 0 0 0 3px rgba(240,82,82,.25) !important; }
+.short-h-input.saving, .ovr-input.saving { opacity: .5; pointer-events: none; }
+
+/* ── Qase ── */
+.qase-cell { vertical-align: middle; }
+.qase-link {
+  font-size: 0.75rem; color: var(--accent); white-space: nowrap;
+  text-decoration: none; border-bottom: 1px dashed rgba(61,214,140,.4);
+  cursor: pointer;
+}
+.qase-link:hover { border-bottom-color: var(--accent); }
+.qase-empty { font-size: 0.75rem; color: var(--muted); cursor: pointer; }
+.qase-empty:hover { color: var(--text); }
+.qase-input {
+  width: 100%; font-size: 0.72rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+  outline: none;
+}
+.qase-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(61,214,140,.18); }
+</style>
+
+<script>
+(function() {
+  function fmtN(v) {
+    v = parseFloat(v);
+    if (isNaN(v)) return '';
+    return v === Math.floor(v) ? String(Math.floor(v)) : v.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  /* ── base check_hours ── */
+  document.querySelectorAll('.base-h-input').forEach(function(inp) {
+    function save() {
+      var raw = inp.value.trim().replace(',', '.');
+      if (raw === fmtN(inp.dataset.current)) return;
+      if (raw === '') { inp.value = fmtN(inp.dataset.current); return; }
+
+      inp.classList.remove('base-h-error');
+      inp.classList.add('saving');
+
+      fetch('/features/' + inp.dataset.id + '/hours', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'check_hours=' + encodeURIComponent(raw)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(body) {
+        if (!body.ok) throw new Error(body.error);
+        inp.dataset.current = String(body.check_hours);
+        inp.value = fmtN(body.check_hours);
+        /* обновляем placeholder в соседнем ovr-input, если override не задан */
+        var row = inp.closest('tr');
+        if (row) {
+          var ovrInp = row.querySelector('.ovr-input');
+          if (ovrInp && !ovrInp.classList.contains('ovr-set')) {
+            ovrInp.placeholder = fmtN(body.check_hours);
+            ovrInp.dataset.base = String(body.check_hours);
+          }
+        }
+        recalcSumHours();
+      })
+      .catch(function() { inp.classList.add('base-h-error'); inp.value = fmtN(inp.dataset.current); })
+      .finally(function() { inp.classList.remove('saving'); });
+    }
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter')  { e.preventDefault(); inp.blur(); }
+      if (e.key === 'Escape') { inp.value = fmtN(inp.dataset.current); inp.blur(); }
+    });
+  });
+
+  /* ── override_hours ── */
+  document.querySelectorAll('.ovr-input').forEach(function(inp) {
+    function save() {
+      var raw = inp.value.trim().replace(',', '.');
+      var prev = inp.dataset.current;
+      if (raw === prev) return;
+      if (raw === fmtN(prev)) return;
+
+      inp.classList.remove('ovr-error');
+      inp.classList.add('saving');
+
+      fetch('/features/' + inp.dataset.id + '/override-hours', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'override_hours=' + encodeURIComponent(raw)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(body) {
+        if (!body.ok) throw new Error(body.error);
+        var ovr = body.override_hours;
+        inp.dataset.current = ovr !== null && ovr !== undefined ? String(ovr) : '';
+        if (ovr !== null && ovr !== undefined) {
+          inp.value = fmtN(ovr);
+          inp.classList.add('ovr-set');
+        } else {
+          inp.value = '';
+          inp.classList.remove('ovr-set');
+        }
+        inp.placeholder = fmtN(body.effective_hours !== null ? body.effective_hours : inp.dataset.base);
+        recalcSumHours();
+      })
+      .catch(function() {
+        inp.classList.add('ovr-error');
+        inp.value = inp.dataset.current ? fmtN(inp.dataset.current) : '';
+      })
+      .finally(function() { inp.classList.remove('saving'); });
+    }
+
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter')  { e.preventDefault(); inp.blur(); }
+      if (e.key === 'Escape') { inp.value = inp.dataset.current ? fmtN(inp.dataset.current) : ''; inp.blur(); }
+    });
+  });
+
+  /* ── Пересчёт "Сумма часов (акт.)" ── */
+  window.recalcSumHours = function() {
+    var chip = document.getElementById('sum-hours-val');
+    if (!chip) return;
+    var total = 0;
+    document.querySelectorAll('tbody tr[data-team]').forEach(function(row) {
+      var scopeSel = row.querySelector('.scope-select');
+      if (!scopeSel) return;
+      var scope = scopeSel.value;
+      if (scope !== 'yes' && scope !== 'partial') return;
+      // effective = ovr если задан, иначе base
+      var ovrInp  = row.querySelector('.ovr-input');
+      var baseInp = row.querySelector('.base-h-input');
+      var hours = 0;
+      if (ovrInp && ovrInp.classList.contains('ovr-set') && ovrInp.dataset.current) {
+        hours = parseFloat(ovrInp.dataset.current) || 0;
+      } else if (baseInp && baseInp.dataset.current) {
+        hours = parseFloat(baseInp.dataset.current) || 0;
+      }
+      total += hours;
+    });
+    chip.textContent = (Math.round(total * 10) / 10) + ' ч';
+  };
+}());
+</script>
+
+<script>
+(function() {
+  document.querySelectorAll('.comment-input').forEach(function(inp) {
+    if (inp.value) inp.classList.add('has-value');
+    function save() {
+      var val = inp.value.trim();
+      if (val === inp.dataset.current) return;
+      inp.classList.remove('save-error');
+      inp.classList.add('saving');
+      fetch('/features/' + inp.dataset.id + '/comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'comment=' + encodeURIComponent(val)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(body) {
+        if (!body.ok) throw new Error(body.error);
+        inp.dataset.current = val;
+        inp.classList.toggle('has-value', !!val);
+      })
+      .catch(function() {
+        inp.classList.add('save-error');
+        inp.value = inp.dataset.current;
+        inp.classList.toggle('has-value', !!inp.dataset.current);
+      })
+      .finally(function() { inp.classList.remove('saving'); });
+    }
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter')  { e.preventDefault(); inp.blur(); }
+      if (e.key === 'Escape') { inp.value = inp.dataset.current; inp.blur(); }
+    });
+  });
+}());
+</script>
+
+<script>
+document.querySelectorAll('.team-select').forEach(function(sel) {
+  sel.addEventListener('change', function() {
+    var id  = sel.dataset.id;
+    var val = sel.value;
+    sel.classList.add('saving');
+    sel.classList.remove('save-error');
+    fetch('/features/' + id + '/team', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'team=' + encodeURIComponent(val)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(body) {
+      if (!body.ok) throw new Error(body.error);
+      sel.dataset.current = val;
+      sel.classList.toggle('team-set', !!val);
+    })
+    .catch(function() {
+      sel.classList.add('save-error');
+      sel.value = sel.dataset.current;
+    })
+    .finally(function() { sel.classList.remove('saving'); });
+  });
+});
+</script>
+
+<script>
+document.querySelectorAll('.scope-select').forEach(function(sel) {
+  sel.addEventListener('change', function() {
+    var id  = sel.dataset.id;
+    var val = sel.value;
+    sel.classList.add('saving');
+    sel.classList.remove('save-error');
+
+    var body = 'regression_scope=' + encodeURIComponent(val);
+    fetch('/features/' + id + '/scope', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    })
+    .then(function(r) {
+      if (!r.ok) throw new Error('server error');
+      return r.json();
+    })
+    .then(function() {
+      // обновляем CSS-класс под новый цвет
+      ['empty','yes','partial','no'].forEach(function(c) {
+        sel.classList.remove('scope-select--' + c);
+      });
+      sel.classList.add('scope-select--' + (val || 'empty'));
+      sel.dataset.current = val;
+      recalcSumHours();
+    })
+    .catch(function() {
+      sel.classList.add('save-error');
+      // откат к предыдущему значению
+      sel.value = sel.dataset.current;
+    })
+    .finally(function() {
+      sel.classList.remove('saving');
+    });
+  });
+});
+</script>
+
+<script>
+(function() {
+  var filter = document.getElementById('team-filter');
+  if (!filter) return;
+  filter.addEventListener('change', function() {
+    var val = filter.value;
+    document.querySelectorAll('#features-table tbody tr').forEach(function(row) {
+      var team = row.dataset.team || '';
+      row.style.display = (!val || team === val) ? '' : 'none';
+    });
+  });
+}());
+</script>
+
+<script>
+/* ── Inline-редактирование Qase URL ── */
+(function() {
+  document.querySelectorAll('.qase-cell').forEach(function(cell) {
+    var display = cell.querySelector('.qase-display');
+    var input   = cell.querySelector('.qase-input');
+    if (!display || !input) return;
+    var fid = input.dataset.id;
+
+    function renderDisplay(url) {
+      if (url) {
+        display.innerHTML = '<a class="qase-link" href="' + url + '" target="_blank" rel="noopener" title="' + url + '">Открыть ↗</a>';
+        display.querySelector('a').addEventListener('click', function(e){ e.preventDefault(); showInput(); });
+      } else {
+        display.innerHTML = '<span class="qase-empty">—</span>';
+        display.querySelector('span').addEventListener('click', showInput);
+      }
+    }
+
+    function showInput() {
+      display.style.display = 'none';
+      input.style.display   = 'block';
+      input.focus();
+      input.select();
+    }
+
+    function hideInput() {
+      input.style.display   = 'none';
+      display.style.display = '';
+    }
+
+    function save() {
+      var url = input.value.trim();
+      if (url === input.dataset.current) { hideInput(); return; }
+      fetch('/features/' + fid + '/qase-url', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'qase_url=' + encodeURIComponent(url)
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        if (!data.ok) return;
+        input.dataset.current = url;
+        renderDisplay(url);
+        hideInput();
+      });
+    }
+
+    function cancel() {
+      input.value = input.dataset.current;
+      hideInput();
+    }
+
+    /* Инициализация */
+    renderDisplay(input.dataset.current);
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { cancel(); }
+    });
+  });
+}());
+</script>
+{% endblock %}

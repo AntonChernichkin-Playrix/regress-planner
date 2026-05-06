@@ -1,0 +1,951 @@
+{% extends "base.html" %}
+{% block title %}Распределение{% endblock %}
+{% block nav_distribution %}active{% endblock %}
+
+{% block head %}
+<style>
+  .page-inner { max-width: 100rem; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem">
+  <h1 style="margin-bottom:0">Распределение регресса</h1>
+  <button id="save-history-btn" class="btn btn-primary" onclick="openSaveHistoryModal()">💾 Сохранить в историю</button>
+</div>
+
+<!-- Модальное окно сохранения -->
+<div id="save-hist-backdrop" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)" onclick="closeSaveHistoryModal()"></div>
+<div id="save-hist-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2001;width:min(90vw,28rem);background:var(--surface);border:1px solid var(--border);border-radius:0.75rem;box-shadow:0 24px 60px rgba(0,0,0,.5);padding:1.5rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+    <span style="font-weight:700;font-size:1rem">Сохранить снимок</span>
+    <button onclick="closeSaveHistoryModal()" style="background:none;border:none;color:var(--muted);font-size:1.25rem;cursor:pointer;line-height:1;padding:0.15rem 0.4rem;border-radius:0.3rem" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✕</button>
+  </div>
+  <div class="field">
+    <label>Версия <span class="required">*</span></label>
+    <input type="text" id="hist-version" placeholder="напр. 1.42.0" autocomplete="off" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none">
+  </div>
+  <div class="field" style="margin-top:.85rem">
+    <label>Фактически затрачено, ч <span class="optional">(необязательно)</span></label>
+    <input type="number" id="hist-actual" min="0" step="0.5" placeholder="напр. 48" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none">
+  </div>
+  <div class="field" style="margin-top:.85rem">
+    <label>Примечание <span class="optional">(необязательно)</span></label>
+    <textarea id="hist-note" rows="2" placeholder="Комментарий к снимку…" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.875rem;font-family:inherit;resize:vertical;outline:none"></textarea>
+  </div>
+  <div id="hist-error" style="display:none;color:#fca5a5;font-size:.82rem;margin-top:.5rem"></div>
+  <div style="display:flex;gap:.6rem;margin-top:1.25rem">
+    <button id="hist-save-btn" class="btn btn-primary" onclick="doSaveHistory()">Сохранить</button>
+    <button class="btn" onclick="closeSaveHistoryModal()">Отмена</button>
+  </div>
+</div>
+
+<!-- ─── Team Qase Run modal ─── -->
+<div id="team-run-backdrop" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)" onclick="closeTeamRunModal()"></div>
+<div id="team-run-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2001;width:min(90vw,30rem);background:var(--surface);border:1px solid var(--border);border-radius:0.75rem;box-shadow:0 24px 60px rgba(0,0,0,.5);padding:1.5rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+    <span style="font-weight:700;font-size:1rem">Создать Team Run в Qase</span>
+    <button onclick="closeTeamRunModal()" style="background:none;border:none;color:var(--muted);font-size:1.25rem;cursor:pointer;line-height:1;padding:0.15rem 0.4rem;border-radius:0.3rem" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✕</button>
+  </div>
+  <p id="team-run-info" style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.5"></p>
+  <div class="field">
+    <label>Название Test Run <span class="required">*</span></label>
+    <input type="text" id="team-run-title" placeholder="напр. (760) HTT — полный" autocomplete="off"
+           style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none"
+           onkeydown="if(event.key==='Enter')doCreateTeamRun()">
+  </div>
+  <div id="team-run-error"  style="display:none;color:#fca5a5;font-size:.82rem;margin-top:.5rem"></div>
+  <div id="team-run-result" style="display:none;color:#86efac;font-size:.85rem;margin-top:.5rem;line-height:1.5"></div>
+  <div style="display:flex;gap:.6rem;margin-top:1.25rem">
+    <button id="team-run-save-btn" class="btn btn-primary" onclick="doCreateTeamRun()">Создать Run</button>
+    <button class="btn" onclick="closeTeamRunModal()">Закрыть</button>
+  </div>
+</div>
+
+<!-- ─── Qase Test Run modal ─── -->
+<div id="qase-run-backdrop" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)" onclick="closeQaseRunModal()"></div>
+<div id="qase-run-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2001;width:min(90vw,28rem);background:var(--surface);border:1px solid var(--border);border-radius:0.75rem;box-shadow:0 24px 60px rgba(0,0,0,.5);padding:1.5rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+    <span style="font-weight:700;font-size:1rem">Создать Test Run в Qase</span>
+    <button onclick="closeQaseRunModal()" style="background:none;border:none;color:var(--muted);font-size:1.25rem;cursor:pointer;line-height:1;padding:0.15rem 0.4rem;border-radius:0.3rem" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✕</button>
+  </div>
+  <p id="qase-run-feat-name" style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></p>
+  <div class="field">
+    <label>Название Test Run <span class="required">*</span></label>
+    <input type="text" id="qase-run-title" placeholder="напр. (760) Fishdom Матч3" autocomplete="off"
+           style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none"
+           onkeydown="if(event.key==='Enter')doCreateQaseRun()">
+  </div>
+  <div id="qase-run-error"  style="display:none;color:#fca5a5;font-size:.82rem;margin-top:.5rem"></div>
+  <div id="qase-run-result" style="display:none;color:#86efac;font-size:.85rem;margin-top:.5rem;line-height:1.5">
+  </div>
+  <div style="display:flex;gap:.6rem;margin-top:1.25rem">
+    <button id="qase-run-save-btn" class="btn btn-primary" onclick="doCreateQaseRun()">Создать Run</button>
+    <button class="btn" onclick="closeQaseRunModal()">Закрыть</button>
+  </div>
+</div>
+
+<div class="dist-layout">
+
+  <!-- ═══════════ ЛЕВАЯ: участники (дроп-зоны) ═══════════ -->
+  <div class="dist-col" id="col-members">
+    <div class="dist-col-header">
+      <span class="dist-col-title">Участники</span>
+      <span class="stat-chip">{{ members|length }}</span>
+      <span class="stat-chip" style="margin-left:auto">
+        Назначено: <strong id="total-assigned-hours">
+          {{ features | selectattr('assigned_member_id') | map(attribute='effective_hours') | sum | fmtnum }}
+        </strong>ч
+      </span>
+    </div>
+
+    {% if not members %}
+    <div class="empty-state">
+      <div class="empty-icon">👥</div>
+      <p>Участников пока нет. <a href="/members">Добавьте участников</a>.</p>
+    </div>
+    {% else %}
+    {% set prev_team = namespace(t=none) %}
+    {% for m in members %}
+    {% if m.team != prev_team.t %}
+      {% set prev_team.t = m.team %}
+      <div class="team-divider" data-team="{{ m.team or '' }}">
+        {{ m.team or 'Без команды' }}
+        <button class="team-run-btn" data-team="{{ m.team or '' }}"
+                title="Собрать Team Run в Qase (объединить все чек-листы команды)">▶ Run</button>
+      </div>
+    {% endif %}
+
+    {% set total_h = m.available_days * 8 %}
+    {% set rem_h   = remaining[m.id | string] %}
+
+    {# Разбираем comma-separated девайсы #}
+    {% set dev_color = {'global': '#60b4ff', 'china': '#ff7070', 'vietnam': '#90d860'} %}
+    {% set dev_ltr   = {'global': 'Г', 'china': 'К', 'vietnam': 'В'} %}
+    {% set dev_ns = namespace(parts=[]) %}
+    {% for p in (m.device or '').split(',') %}
+      {% if p and p in dev_color %}{% set dev_ns.parts = dev_ns.parts + [p] %}{% endif %}
+    {% endfor %}
+
+    <div class="mc" id="mc-{{ m.id }}" data-member-id="{{ m.id }}">
+      <div class="mc-header">
+
+        {# Значок девайса #}
+        {% if dev_ns.parts | length == 0 %}
+          <span class="dev-badge dev-empty">—</span>
+        {% elif dev_ns.parts | length == 1 %}
+          <span class="dev-badge dev-{{ dev_ns.parts[0] }}">{{ dev_ltr[dev_ns.parts[0]] }}</span>
+        {% else %}
+          {# Значок с градиентом #}
+          {% set col_ns = namespace(c=[]) %}
+          {% set ltr_ns = namespace(s='') %}
+          {% for p in dev_ns.parts %}
+            {% set col_ns.c = col_ns.c + [dev_color[p]] %}
+            {% set ltr_ns.s = ltr_ns.s + dev_ltr[p] %}
+          {% endfor %}
+          <span class="dev-badge"
+                style="background: linear-gradient(135deg, {{ col_ns.c | join(', ') }}); color: #fff; font-size: 0.55rem; letter-spacing: -0.02em;">
+            {{ ltr_ns.s }}
+          </span>
+        {% endif %}
+
+        {# Имя с цветом / градиентом #}
+        {% if dev_ns.parts | length == 0 %}
+          <span class="mc-name dev-txt-empty member-name-link" title="{{ m.full_name }}" onclick="openMemberDevices('{{ m.id }}','{{ m.full_name }}')">{{ m.full_name }}</span>
+        {% elif dev_ns.parts | length == 1 %}
+          <span class="mc-name dev-txt-{{ dev_ns.parts[0] }} member-name-link" title="{{ m.full_name }}" onclick="openMemberDevices('{{ m.id }}','{{ m.full_name }}')">{{ m.full_name }}</span>
+        {% else %}
+          {% set col_ns2 = namespace(c=[]) %}
+          {% for p in dev_ns.parts %}{% set col_ns2.c = col_ns2.c + [dev_color[p]] %}{% endfor %}
+          <span class="mc-name mc-name-grad member-name-link" title="{{ m.full_name }}"
+                onclick="openMemberDevices('{{ m.id }}','{{ m.full_name }}')"
+                style="background: linear-gradient(90deg, {{ col_ns2.c | join(', ') }}); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">
+            {{ m.full_name }}
+          </span>
+        {% endif %}
+        <span class="mc-total">{{ total_h | fmtnum }}ч</span>
+        <span class="mc-remaining {{ 'rem-ok' if rem_h > 0 else ('rem-zero' if rem_h == 0 else 'rem-over') }}"
+              id="rem-{{ m.id }}" data-remaining="{{ rem_h }}">
+          Ост.:&nbsp;{{ rem_h | fmtnum }}ч
+        </span>
+      </div>
+      {% if m.comment %}
+      <div class="mc-comment">{{ m.comment }}</div>
+      {% endif %}
+
+      <ol class="mc-list" id="tags-{{ m.id }}">
+        {% for f in assignments[m.id | string] %}
+        <li class="mc-list-item" id="tag-{{ f.id }}">
+          <span class="mc-li-name" title="{{ f.name }}">{{ f.name }}</span>
+          <span class="mc-li-h">{{ f.effective_hours | fmtnum }}ч</span>
+          {% if f.qase_url %}
+          <button class="mc-run-btn" data-feature-id="{{ f.id }}" data-feature-name="{{ f.name }}"
+                  title="Собрать Test Run в Qase">▶</button>
+          {% endif %}
+          <button class="mc-untag"
+                  data-feature-id="{{ f.id }}"
+                  data-member-id="{{ m.id }}"
+                  aria-label="Снять назначение">×</button>
+        </li>
+        {% endfor %}
+      </ol>
+
+      <div class="mc-drop-hint">Перетащите фичу сюда</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- ═══════════ ПРАВАЯ: фичи (draggable) ═══════════ -->
+  <div class="dist-col" id="col-features">
+    <div class="dist-col-header">
+      <span class="dist-col-title">Фичи регресса</span>
+      <span class="stat-chip">{{ features|length }}</span>
+      <span class="stat-chip" style="margin-left:auto">
+        Итого: <strong>{{ features | map(attribute='effective_hours') | sum | fmtnum }}</strong>ч
+      </span>
+    </div>
+
+    {% if not features %}
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <p>Фич пока нет. <a href="/features">Добавьте фичи</a>.</p>
+    </div>
+    {% else %}
+
+    <input id="feat-filter" class="feat-filter-input" type="text"
+           placeholder="Поиск фичи…" autocomplete="off">
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:1.5rem"></th>
+            <th>Команда</th>
+            <th>Название</th>
+            <th style="text-align:right">Часов</th>
+            <th>Назначено</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set feat_prev_team = namespace(t=none) %}
+          {% for f in features %}
+          {% if f.team != feat_prev_team.t %}
+            {% set feat_prev_team.t = f.team %}
+            <tr class="feat-team-group-row" data-team="{{ f.team or '' }}">
+              <td colspan="5" class="feat-team-group-cell">{{ f.team or '— без команды —' }}</td>
+            </tr>
+          {% endif %}
+          <tr class="feat-row {{ 'feat-assigned' if f.assigned_member_id else '' }}"
+              id="fr-{{ f.id }}"
+              draggable="true"
+              data-feature-id="{{ f.id }}"
+              data-feature-name="{{ f.name }}"
+              data-feature-hours="{{ f.effective_hours }}"
+              data-feature-team="{{ f.team or '' }}">
+            <td class="drag-handle-cell"><span class="drag-handle">⠿</span></td>
+            <td>
+              {% if f.team %}<span class="badge-team">{{ f.team }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td class="feat-name-cell" title="{{ f.name }}">{{ f.name }}</td>
+            <td class="num">
+              {{ f.effective_hours | fmtnum }}
+              {% if f.override_hours is not none %}
+                <span class="ovr-badge" title="В эту версию: {{ f.override_hours | fmtnum }}ч{% if f.short_hours is not none %} | Короткий: {{ f.short_hours | fmtnum }}ч{% endif %} | Дефолт: {{ f.check_hours | fmtnum }}ч">★</span>
+              {% elif f.short_hours is not none %}
+                <span class="ovr-badge" title="Короткий: {{ f.short_hours | fmtnum }}ч | Дефолт: {{ f.check_hours | fmtnum }}ч">·</span>
+              {% endif %}
+            </td>
+            <td id="fa-{{ f.id }}">
+              {% if f.assigned_member_id and f.assigned_member_id | string in member_map %}
+              <span class="assigned-to-badge">{{ member_map[f.assigned_member_id | string].full_name }}</span>
+              {% else %}
+              <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+const FEATURE_REGISTRY = {{ feature_registry_json | safe }};
+const ASSIGNED_IDS = new Set({{ assigned_ids_json | safe }});
+</script>
+
+<style>
+/* ══ Макет ══ */
+.dist-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.75rem;
+  align-items: start;
+}
+@media (max-width: 860px) { .dist-layout { grid-template-columns: 1fr; } }
+
+.dist-col-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+.dist-col-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+
+/* ══ Разделитель команды ══ */
+.team-run-btn {
+  background: none; border: 1px solid rgba(61,214,140,.3); border-radius: 0.3rem;
+  color: rgba(61,214,140,.55); cursor: pointer;
+  font-size: 0.6rem; padding: 0.1rem 0.4rem; line-height: 1.4; flex-shrink: 0;
+  margin-left: 0.5rem; transition: all .15s;
+}
+.team-run-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(61,214,140,.08); }
+
+.team-divider {
+  display: flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.55rem 0 0.25rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.35rem;
+}
+.team-divider:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+/* ══ Карточка участника — дроп-зона ══ */
+.mc {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.4rem;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+  position: relative;
+}
+.mc.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(61,214,140,.22);
+  background: rgba(61,214,140,.04);
+}
+/* Подсветка всех карточек когда идёт перетаскивание */
+body.is-dragging .mc:not(.drag-over) {
+  border-color: rgba(61,214,140,.25);
+}
+
+/* ══ Шапка карточки ══ */
+.mc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* ══ Комментарий участника ══ */
+.mc-comment {
+  font-size: 0.62rem;
+  color: var(--muted);
+  line-height: 1.35;
+  padding: 0.15rem 0.25rem 0.1rem;
+  opacity: 0.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ══ Значок девайса ══ */
+.dev-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem; height: 1.35rem;
+  border-radius: 50%;
+  font-size: 0.63rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.dev-badge.dev-global  { background: #1a3a5c; color: #60b4ff; }
+.dev-badge.dev-china   { background: #4a1a1a; color: #ff7070; }
+.dev-badge.dev-vietnam { background: #2a3a1a; color: #90d860; }
+.dev-badge.dev-empty   { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+/* ══ Имя участника ══ */
+.mc-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dev-txt-global  { color: #60b4ff; }
+.dev-txt-china   { color: #ff7070; }
+.dev-txt-vietnam { color: #90d860; }
+.dev-txt-empty   { color: var(--text); }
+
+/* Кликабельное имя внутри карточки */
+.mc-name.member-name-link { border-bottom: 1px dashed rgba(255,255,255,.18); }
+.mc-name.member-name-link:hover { border-bottom-color: currentColor; opacity: .85; }
+
+.mc-total { font-size: 0.73rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+
+/* ══ Остаток часов ══ */
+.mc-remaining { font-size: 0.78rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.rem-ok   { color: var(--accent); }
+.rem-zero { color: var(--muted); }
+.rem-over { color: var(--danger); }
+
+/* ══ Нумерованный список фич ══ */
+.mc-list {
+  margin: 0.4rem 0 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: feat-n;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+.mc-list-item {
+  counter-increment: feat-n;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.81rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+.mc-list-item::before {
+  content: counter(feat-n) '.';
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 1.4rem;
+  text-align: right;
+}
+.mc-li-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mc-li-h { color: var(--muted); font-size: 0.72rem; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.mc-untag {
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  font-size: 0.82rem; padding: 0; line-height: 1; flex-shrink: 0;
+  transition: color .12s;
+}
+.mc-untag:hover { color: var(--danger); }
+
+.mc-run-btn {
+  background: none; border: none;
+  color: rgba(61,214,140,.5); cursor: pointer;
+  font-size: 0.65rem; padding: 0; line-height: 1; flex-shrink: 0;
+  transition: color .12s;
+}
+.mc-run-btn:hover { color: var(--accent); }
+#qase-run-result a, #team-run-result a { color: var(--accent); text-decoration: underline; }
+
+/* ══ Подсказка «перетащите» ══ */
+.mc-drop-hint {
+  display: none;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 0.3rem 0 0.05rem;
+  pointer-events: none;
+}
+body.is-dragging .mc-drop-hint { display: block; }
+body.is-dragging .mc.drag-over .mc-drop-hint { color: var(--accent); }
+
+/* ══ Фильтр фич ══ */
+.feat-filter-input {
+  width: 100% !important;
+  margin-bottom: 0.65rem;
+  padding: 0.3rem 0.7rem !important;
+  font-size: 0.85rem !important;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--bg) !important;
+  color: var(--text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.feat-filter-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61,214,140,.18); }
+.feat-filter-input::placeholder { color: var(--muted); }
+
+/* ══ Draggable строки фич ══ */
+.feat-row {
+  cursor: grab;
+  transition: opacity .15s, background .12s;
+  user-select: none;
+}
+.feat-row:active { cursor: grabbing; }
+.feat-row:hover { background: var(--surface2); }
+.feat-row.is-dragging { opacity: 0.35; cursor: grabbing; }
+
+/* Значок рукоятки */
+.drag-handle-cell { padding: 0.75rem 0.3rem 0.75rem 0.75rem !important; }
+.drag-handle {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity .12s;
+}
+.feat-row:hover .drag-handle { opacity: 1; }
+
+.feat-name-cell {
+  max-width: 20rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+tr.feat-assigned .feat-name-cell { color: var(--muted); }
+tr.feat-assigned { background: rgba(61,214,140,.03); }
+/* ── Разделитель команд в списке фичей ── */
+.feat-team-group-row { pointer-events: none; }
+.feat-team-group-cell {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(61,214,140,.06);
+  border-top: 1px solid rgba(61,214,140,.15);
+}
+
+.ovr-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-left: 0.1rem;
+  vertical-align: super;
+  line-height: 1;
+  cursor: default;
+}
+
+.assigned-to-badge {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+</style>
+
+<script>
+(function () {
+
+  /* ── утилиты ── */
+  function fmtH(v) {
+    v = parseFloat(v);
+    if (isNaN(v)) return '?';
+    return (v === Math.floor(v) ? Math.floor(v) : v.toFixed(1)) + 'ч';
+  }
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── DOM-обновления ── */
+  function updateRemaining(memberId, val) {
+    var el = document.getElementById('rem-' + memberId);
+    if (!el) return;
+    var v = parseFloat(val);
+    el.dataset.remaining = v;
+    el.textContent = 'Ост.\u00a0' + fmtH(v);
+    el.className = 'mc-remaining ' + (v > 0 ? 'rem-ok' : v === 0 ? 'rem-zero' : 'rem-over');
+  }
+
+  function updateTotalAssigned() {
+    var el = document.getElementById('total-assigned-hours');
+    if (!el) return;
+    var total = 0;
+    Object.keys(FEATURE_REGISTRY).forEach(function (fid) {
+      if (ASSIGNED_IDS.has(fid)) total += FEATURE_REGISTRY[fid].hours;
+    });
+    var t = parseFloat(total.toFixed(1));
+    el.textContent = t === Math.floor(t) ? String(Math.floor(t)) : t.toFixed(1);
+  }
+
+  function addTag(memberId, fid, fname, fhours) {
+    if (document.getElementById('tag-' + fid)) return;
+    var list = document.getElementById('tags-' + memberId);
+    if (!list) return;
+    var li = document.createElement('li');
+    li.className = 'mc-list-item';
+    li.id = 'tag-' + fid;
+    var finfo = FEATURE_REGISTRY[fid] || {};
+    var runBtn = finfo.qase_url
+      ? '<button class="mc-run-btn" data-feature-id="' + fid + '" data-feature-name="' + esc(fname) + '" title="Собрать Test Run в Qase">▶</button>'
+      : '';
+    li.innerHTML =
+      '<span class="mc-li-name" title="' + esc(fname) + '">' + esc(fname) + '</span>' +
+      '<span class="mc-li-h">' + fmtH(fhours) + '</span>' +
+      runBtn +
+      '<button class="mc-untag" data-feature-id="' + fid + '" data-member-id="' + memberId + '"' +
+      ' aria-label="Снять назначение">×</button>';
+    list.appendChild(li);
+  }
+
+  function removeTag(fid) {
+    var el = document.getElementById('tag-' + fid);
+    if (el) el.remove();
+  }
+
+  function updateRightPanel(fid, memberName) {
+    var cell = document.getElementById('fa-' + fid);
+    if (cell) {
+      cell.innerHTML = memberName
+        ? '<span class="assigned-to-badge">' + esc(memberName) + '</span>'
+        : '<span class="muted">—</span>';
+    }
+    var row = document.getElementById('fr-' + fid);
+    if (row) row.classList.toggle('feat-assigned', !!memberName);
+  }
+
+  /* ── Назначение / снятие (AJAX) ── */
+  function doAssign(featureId, memberId, onDone) {
+    fetch('/distribution/assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'feature_id=' + encodeURIComponent(featureId) +
+            '&member_id='  + encodeURIComponent(memberId)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (body) {
+      if (!body.ok) { console.error(body.error); if (onDone) onDone(false); return; }
+
+      var fid    = body.feature_id;
+      var fname  = body.feature_name;
+      var fhours = body.feature_hours;
+
+      if (body.old_member_id) {
+        removeTag(fid);
+        if (body.old_member_remaining != null) updateRemaining(body.old_member_id, body.old_member_remaining);
+        ASSIGNED_IDS.delete(fid);
+      }
+      if (body.new_member_id) {
+        addTag(body.new_member_id, fid, fname, fhours);
+        if (body.new_member_remaining != null) updateRemaining(body.new_member_id, body.new_member_remaining);
+        ASSIGNED_IDS.add(fid);
+      } else {
+        if (!body.old_member_id) { removeTag(fid); ASSIGNED_IDS.delete(fid); }
+      }
+
+      updateRightPanel(fid, body.new_member_name);
+      updateTotalAssigned();
+      if (onDone) onDone(true);
+    })
+    .catch(function () { if (onDone) onDone(false); });
+  }
+
+  /* ══════════════ Drag-and-Drop ══════════════ */
+
+  var dragId = null;  /* ID фичи которую тащим */
+
+  /* Навешиваем drag-события на строки фич */
+  document.querySelectorAll('.feat-row').forEach(function (row) {
+    var fid = row.dataset.featureId;
+
+    row.addEventListener('dragstart', function (e) {
+      dragId = fid;
+      e.dataTransfer.setData('text/plain', fid);
+      e.dataTransfer.effectAllowed = 'move';
+      /* Небольшая задержка чтобы браузер успел снять скриншот до смены opacity */
+      setTimeout(function () { row.classList.add('is-dragging'); }, 0);
+      document.body.classList.add('is-dragging');
+    });
+
+    row.addEventListener('dragend', function () {
+      row.classList.remove('is-dragging');
+      document.body.classList.remove('is-dragging');
+      dragId = null;
+      document.querySelectorAll('.mc.drag-over').forEach(function (mc) {
+        mc.classList.remove('drag-over');
+      });
+    });
+  });
+
+  /* Навешиваем drop-события на карточки участников */
+  document.querySelectorAll('.mc').forEach(function (mc) {
+    var mid = mc.dataset.memberId;
+
+    mc.addEventListener('dragenter', function (e) {
+      e.preventDefault();
+      mc.classList.add('drag-over');
+    });
+
+    mc.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      mc.classList.add('drag-over');
+    });
+
+    mc.addEventListener('dragleave', function (e) {
+      /* Игнорируем уход на дочерний элемент */
+      if (!mc.contains(e.relatedTarget)) {
+        mc.classList.remove('drag-over');
+      }
+    });
+
+    mc.addEventListener('drop', function (e) {
+      e.preventDefault();
+      mc.classList.remove('drag-over');
+      var fid = e.dataTransfer.getData('text/plain') || dragId;
+      if (!fid || !mid) return;
+      if (fid === mid) return; /* на себя — игнор */
+      doAssign(fid, mid, null);
+    });
+  });
+
+  /* ══ Кнопка × (снятие назначения) ══ */
+  document.getElementById('col-members').addEventListener('click', function (e) {
+    var btn = e.target.closest('.mc-untag');
+    if (!btn) return;
+    var fid = btn.dataset.featureId;
+    removeTag(fid);
+    doAssign(fid, '', function (ok) { if (!ok) location.reload(); });
+  });
+
+  /* ══ Фильтр фич в правой колонке ══ */
+  var featFilter = document.getElementById('feat-filter');
+  if (featFilter) {
+    featFilter.addEventListener('input', function () {
+      var q = featFilter.value.toLowerCase().trim();
+      document.querySelectorAll('.feat-row').forEach(function (row) {
+        var match = !q ||
+          row.dataset.featureName.toLowerCase().indexOf(q) !== -1 ||
+          row.dataset.featureTeam.toLowerCase().indexOf(q) !== -1;
+        row.style.display = match ? '' : 'none';
+      });
+      /* Скрываем разделитель команды, если все её фичи скрыты */
+      document.querySelectorAll('.feat-team-group-row').forEach(function (grp) {
+        var team = grp.dataset.team;
+        var hasVisible = Array.from(
+          document.querySelectorAll('.feat-row[data-feature-team="' + team + '"]')
+        ).some(function (r) { return r.style.display !== 'none'; });
+        grp.style.display = hasVisible ? '' : 'none';
+      });
+    });
+  }
+
+}());
+</script>
+
+<script>
+/* ── Team Qase Run ── */
+var teamRunFeatureIds = [];
+
+function openTeamRunModal(team) {
+  // Собираем все назначенные фичи участников этой команды, у которых есть qase_url
+  var memberEls = document.querySelectorAll('.mc[data-member-id]');
+  var featureIds = [];
+  var featureNames = [];
+  memberEls.forEach(function(mc) {
+    // Проверяем принадлежность к команде по ближайшему .team-divider
+    var divider = null;
+    var prev = mc.previousElementSibling;
+    while (prev) {
+      if (prev.classList.contains('team-divider')) { divider = prev; break; }
+      if (prev.classList.contains('mc')) { prev = prev.previousElementSibling; continue; }
+      prev = prev.previousElementSibling;
+    }
+    if (!divider || divider.dataset.team !== team) return;
+    // Собираем назначенные фичи с qase_url
+    mc.querySelectorAll('.mc-list-item').forEach(function(li) {
+      var fid = li.id.replace('tag-', '');
+      var finfo = FEATURE_REGISTRY[fid];
+      if (finfo && finfo.qase_url && !featureIds.includes(fid)) {
+        featureIds.push(fid);
+        featureNames.push(finfo.name);
+      }
+    });
+  });
+
+  teamRunFeatureIds = featureIds;
+  document.getElementById('team-run-title').value = '';
+  document.getElementById('team-run-error').style.display = 'none';
+  document.getElementById('team-run-result').style.display = 'none';
+  document.getElementById('team-run-save-btn').disabled = false;
+  document.getElementById('team-run-save-btn').textContent = 'Создать Run';
+
+  var infoEl = document.getElementById('team-run-info');
+  if (featureIds.length === 0) {
+    infoEl.textContent = 'Нет фич с чек-листами Qase, назначенных на участников команды «' + team + '».';
+    document.getElementById('team-run-save-btn').disabled = true;
+  } else {
+    infoEl.innerHTML = '<b>' + team + '</b>: ' + featureIds.length + ' чек-лист(ов) Qase:<br>' +
+      featureNames.map(function(n){ return '· ' + n; }).join('<br>');
+  }
+  document.getElementById('team-run-backdrop').style.display = 'block';
+  document.getElementById('team-run-modal').style.display    = 'block';
+  setTimeout(function(){ document.getElementById('team-run-title').focus(); }, 50);
+}
+
+function closeTeamRunModal() {
+  document.getElementById('team-run-backdrop').style.display = 'none';
+  document.getElementById('team-run-modal').style.display    = 'none';
+}
+
+function doCreateTeamRun() {
+  var title  = document.getElementById('team-run-title').value.trim();
+  var errEl  = document.getElementById('team-run-error');
+  var btn    = document.getElementById('team-run-save-btn');
+  if (!title) { errEl.textContent='Введите название'; errEl.style.display='block'; return; }
+  btn.disabled = true; btn.textContent = 'Создание… (~15 с при первом запуске)'; errEl.style.display = 'none';
+
+  var parts = teamRunFeatureIds.map(function(id){ return 'feature_ids=' + encodeURIComponent(id); });
+  parts.push('run_title=' + encodeURIComponent(title));
+  var body = parts.join('&');
+
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, 180000);
+  fetch('/api/qase/create-team-run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body,
+    signal: ctrl.signal
+  }).finally(function(){ clearTimeout(timer); })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      errEl.textContent = data.error; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Создать Run'; return;
+    }
+    var resEl = document.getElementById('team-run-result');
+    resEl.innerHTML = '✓ Run создан (' + data.cases + ' кейсов из ' + data.checklists + ' чек-листов) — ' +
+      '<a href="' + data.run_url + '" target="_blank" rel="noopener">Открыть в Qase ↗</a>';
+    resEl.style.display = 'block';
+    btn.textContent = 'Создать ещё'; btn.disabled = false;
+  })
+  .catch(function(e) {
+    errEl.textContent = 'Ошибка: ' + e; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Создать Run';
+  });
+}
+
+/* Делегированный клик по кнопке ▶ Run команды */
+document.getElementById('col-members').addEventListener('click', function(e) {
+  var btn = e.target.closest('.team-run-btn');
+  if (!btn) return;
+  openTeamRunModal(btn.dataset.team);
+});
+
+/* ── Qase Test Run ── */
+var qaseRunFeatureId = null;
+
+function openQaseRunModal(featureId, featureName) {
+  qaseRunFeatureId = featureId;
+  document.getElementById('qase-run-title').value = '';
+  document.getElementById('qase-run-feat-name').textContent = featureName;
+  document.getElementById('qase-run-error').style.display = 'none';
+  document.getElementById('qase-run-result').style.display = 'none';
+  document.getElementById('qase-run-save-btn').disabled = false;
+  document.getElementById('qase-run-save-btn').textContent = 'Создать Run';
+  document.getElementById('qase-run-backdrop').style.display = 'block';
+  document.getElementById('qase-run-modal').style.display    = 'block';
+  setTimeout(function(){ document.getElementById('qase-run-title').focus(); }, 50);
+}
+function closeQaseRunModal() {
+  document.getElementById('qase-run-backdrop').style.display = 'none';
+  document.getElementById('qase-run-modal').style.display    = 'none';
+}
+function doCreateQaseRun() {
+  var title = document.getElementById('qase-run-title').value.trim();
+  var errEl = document.getElementById('qase-run-error');
+  var btn   = document.getElementById('qase-run-save-btn');
+  if (!title) { errEl.textContent='Введите название'; errEl.style.display='block'; return; }
+  btn.disabled = true; btn.textContent = 'Создание… (может занять ~15 с при первом запуске)'; errEl.style.display = 'none';
+  var body = 'feature_id=' + encodeURIComponent(qaseRunFeatureId) + '&run_title=' + encodeURIComponent(title);
+  var ctrl = new AbortController();
+  var fetchTimer = setTimeout(function(){ ctrl.abort(); }, 120000); // 2 мин таймаут
+  fetch('/api/qase/create-run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body,
+    signal: ctrl.signal
+  }).finally(function(){ clearTimeout(fetchTimer); })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      errEl.textContent = data.error; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Создать Run'; return;
+    }
+    var resEl = document.getElementById('qase-run-result');
+    resEl.innerHTML = '✓ Run создан (' + data.cases + ' кейсов) — ' +
+      '<a href="' + data.run_url + '" target="_blank" rel="noopener">Открыть в Qase ↗</a>';
+    resEl.style.display = 'block';
+    btn.textContent = 'Создать ещё';
+    btn.disabled = false;
+  })
+  .catch(function(e) {
+    errEl.textContent = 'Ошибка: ' + e; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Создать Run';
+  });
+}
+
+/* Делегированный клик по кнопке ▶ */
+document.getElementById('col-members').addEventListener('click', function(e) {
+  var btn = e.target.closest('.mc-run-btn');
+  if (!btn) return;
+  openQaseRunModal(btn.dataset.featureId, btn.dataset.featureName);
+});
+
+function openSaveHistoryModal() {
+  document.getElementById('save-hist-backdrop').style.display = 'block';
+  document.getElementById('save-hist-modal').style.display    = 'block';
+  document.getElementById('hist-error').style.display = 'none';
+  setTimeout(function(){ document.getElementById('hist-version').focus(); }, 50);
+}
+function closeSaveHistoryModal() {
+  document.getElementById('save-hist-backdrop').style.display = 'none';
+  document.getElementById('save-hist-modal').style.display    = 'none';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeSaveHistoryModal();
+});
+function doSaveHistory() {
+  var version = document.getElementById('hist-version').value.trim();
+  var actual  = document.getElementById('hist-actual').value.trim();
+  var note    = document.getElementById('hist-note').value.trim();
+  var errEl   = document.getElementById('hist-error');
+  var btn     = document.getElementById('hist-save-btn');
+  if (!version) {
+    errEl.textContent = 'Укажите версию';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Сохранение…';
+  errEl.style.display = 'none';
+  var body = 'version=' + encodeURIComponent(version) + '&actual_hours=' + encodeURIComponent(actual) + '&note=' + encodeURIComponent(note);
+  fetch('/history', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: body })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        errEl.textContent = data.error; errEl.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Сохранить';
+      } else {
+        closeSaveHistoryModal();
+        window.location.href = '/history/' + data.id;
+      }
+    })
+    .catch(function() {
+      errEl.textContent = 'Ошибка сохранения'; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Сохранить';
+    });
+}
+</script>
+{% endblock %}

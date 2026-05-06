@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}История — {{ version }}{% endblock %}
+{% block nav_history %}active{% endblock %}
+
+{% block head %}
+<style>
+  .hist-meta {
+    display: flex; flex-wrap: wrap; gap: 0.75rem;
+    align-items: center; margin-bottom: 1.5rem;
+  }
+  .hist-version {
+    font-size: 1.5rem; font-weight: 800;
+    color: var(--accent); letter-spacing: -0.02em;
+  }
+  .hist-date { color: var(--muted); font-size: 0.875rem; }
+
+  /* ── Карточки участников ── */
+  .hist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+  .hist-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    padding: 0.75rem 0.875rem;
+  }
+  .hist-card-header {
+    display: flex; align-items: baseline;
+    justify-content: space-between; gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .hist-name { font-weight: 700; font-size: 0.9rem; }
+  .hist-team { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .hist-hours {
+    font-size: 0.75rem; color: var(--muted);
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+  }
+  .hist-hours .rem-ok   { color: var(--accent); font-weight: 600; }
+  .hist-hours .rem-over { color: var(--danger);  font-weight: 600; }
+  .hist-hours .rem-zero { color: var(--muted); }
+
+  .hist-feat-list {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 0.12rem;
+    counter-reset: hfn;
+  }
+  .hist-feat-item {
+    counter-increment: hfn;
+    display: flex; align-items: baseline; gap: 0.3rem;
+    font-size: 0.78rem; color: var(--text); line-height: 1.45;
+  }
+  .hist-feat-item::before {
+    content: counter(hfn) '.';
+    color: var(--muted); font-size: 0.68rem;
+    min-width: 1.2rem; text-align: right; flex-shrink: 0;
+  }
+  .hist-feat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist-feat-h    { color: var(--muted); font-size: 0.7rem; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .hist-feat-team { font-size: 0.65rem; color: var(--muted); flex-shrink: 0; }
+
+  .hist-empty-feat { color: var(--muted); font-size: 0.78rem; font-style: italic; }
+
+  /* ── Нераспределённые ── */
+  .unassigned-section { margin-top: 2rem; }
+  .unassigned-section h2 { font-size: 1rem; margin-bottom: 0.75rem; color: var(--danger); }
+  .unassigned-table td, .unassigned-table th { padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+
+  /* ── Сводка ── */
+  .summary-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
+  <a href="/history" class="btn btn-sm">← Все снимки</a>
+  <div class="hist-meta" style="margin-bottom:0">
+    <span class="hist-version">{{ version }}</span>
+    {% if note %}<span class="muted">{{ note }}</span>{% endif %}
+    <span class="hist-date">{{ created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+  </div>
+</div>
+
+<!-- Сводка -->
+<div class="summary-row">
+  <span class="stat-chip">Участников <strong>{{ snap.totals.members_count }}</strong></span>
+  <span class="stat-chip">Дней на регресс <strong>{{ snap.totals.total_avail_days | default(0) | round(1) }}</strong></span>
+  <span class="stat-chip">Доступно часов <strong>{{ snap.totals.total_avail_hours | default(0) | round(1) }}</strong></span>
+  <span class="stat-chip">Назначено часов <strong>{{ snap.totals.total_spent_hours | default(0) | round(1) }}</strong></span>
+  {% if snap.totals.actual_hours is defined and snap.totals.actual_hours is not none %}
+  <span class="stat-chip" style="border-color:rgba(251,191,36,.3)">Фактически, ч <strong style="color:#fbbf24">{{ snap.totals.actual_hours | round(1) }}</strong></span>
+  {% endif %}
+  <span class="stat-chip">Фич <strong>{{ snap.totals.features_count }}</strong></span>
+  {% if snap.totals.unassigned_count > 0 %}
+  <span class="stat-chip" style="border-color:rgba(240,82,82,.35);color:#fca5a5">
+    Не распределено <strong style="color:var(--danger)">{{ snap.totals.unassigned_count }}</strong>
+  </span>
+  {% else %}
+  <span class="stat-chip" style="border-color:rgba(61,214,140,.3)">
+    Все фичи распределены <strong style="color:var(--accent)">✓</strong>
+  </span>
+  {% endif %}
+</div>
+
+<!-- Карточки участников -->
+{% set teams = snap.members | map(attribute='team') | unique | list %}
+{% for team in teams | sort %}
+  {% set team_members = snap.members | selectattr('team', 'equalto', team) | list %}
+  {% if team_members %}
+  <div style="margin-top:1.5rem">
+    <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-bottom:.35rem;border-bottom:1px solid var(--border);margin-bottom:.6rem">
+      {{ team or 'Без команды' }}
+    </div>
+    <div class="hist-grid" style="margin-top:.5rem">
+      {% for m in team_members %}
+      {% set rem = m.remaining_hours %}
+      <div class="hist-card">
+        <div class="hist-card-header">
+          <span class="hist-name">{{ m.full_name }}</span>
+        </div>
+        <div class="hist-hours">
+          <span>{{ m.available_days | round(1) }} дн · {{ m.total_hours | round(1) }} ч</span>
+          <span>потрачено {{ m.spent_hours | round(1) }} ч</span>
+          <span class="{{ 'rem-ok' if rem > 0 else ('rem-zero' if rem == 0 else 'rem-over') }}">
+            остаток {{ rem | round(1) }} ч
+          </span>
+        </div>
+        {% if m.features %}
+        <ul class="hist-feat-list">
+          {% for f in m.features %}
+          <li class="hist-feat-item" title="{{ f.name }}">
+            <span class="hist-feat-name">{{ f.name }}</span>
+            <span class="hist-feat-h">{{ f.hours | round(1) }}ч</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hist-empty-feat">— фичи не назначены —</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+<!-- Нераспределённые фичи -->
+{% if snap.unassigned %}
+<div class="unassigned-section">
+  <h2>Нераспределённые фичи ({{ snap.unassigned | length }})</h2>
+  <div class="table-wrap">
+    <table class="unassigned-table">
+      <thead>
+        <tr>
+          <th>Команда</th>
+          <th>Фича</th>
+          <th style="text-align:right">Часов</th>
+          <th>Регресс</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in snap.unassigned %}
+        <tr>
+          <td class="muted">{{ f.team or '—' }}</td>
+          <td>{{ f.name }}</td>
+          <td class="num">{{ f.hours | round(1) }}</td>
+          <td class="muted">{{ f.scope }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

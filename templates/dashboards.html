@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Дашборды{% endblock %}
+{% block sse_toast %}{% endblock %}
+{% block sse_script %}{% endblock %}
+{% block nav_dashboards %}active{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  .db-section { margin-bottom: 2.5rem; }
+  .db-section h2 {
+    font-size: 1rem; font-weight: 700; margin-bottom: 1rem;
+    padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .db-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr));
+    gap: 1rem;
+  }
+  .db-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    padding: 1rem 1.25rem 1.25rem;
+  }
+  .db-card h3 {
+    font-size: 0.8rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 0.75rem;
+  }
+  .db-canvas-wrap { position: relative; height: 220px; }
+  .db-canvas-wrap-tall { position: relative; height: 320px; }
+
+  .db-controls {
+    display: flex; flex-wrap: wrap; gap: 0.6rem;
+    align-items: center; margin-bottom: 1.25rem;
+  }
+  .db-controls label { font-size: 0.82rem; color: var(--muted); }
+  .db-controls select {
+    padding: 0.35rem 2rem 0.35rem 0.65rem;
+    font-size: 0.82rem; width: auto;
+  }
+
+  .db-empty {
+    color: var(--muted); text-align: center;
+    padding: 4rem 2rem; font-size: 0.9rem;
+  }
+
+  /* Мини-статистика */
+  .kpi-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .kpi {
+    flex: 1; min-width: 8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    padding: 0.75rem 1rem;
+    text-align: center;
+  }
+  .kpi-val { font-size: 1.6rem; font-weight: 800; color: var(--accent); line-height: 1.1; }
+  .kpi-lbl { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+</style>
+{% endblock %}
+
+{% block body %}
+<h1>Дашборды</h1>
+
+{% if not snaps %}
+<div class="db-empty">
+  <p>Нет сохранённых снимков. Сохраните распределение с вкладки «Распределение».</p>
+</div>
+{% else %}
+
+<!-- KPI по последнему снимку -->
+{% set last = snaps[-1] %}
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-val">{{ last.members }}</div>
+    <div class="kpi-lbl">Участников</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val">{{ last.avail_days | round(0) | int }}</div>
+    <div class="kpi-lbl">Дней (посл. версия)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val">{{ last.avail_hours | round(0) | int }}</div>
+    <div class="kpi-lbl">Доступно, ч</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val">{{ last.spent_hours | round(0) | int }}</div>
+    <div class="kpi-lbl">Назначено, ч</div>
+  </div>
+  {% if last.actual_hours %}
+  <div class="kpi">
+    <div class="kpi-val" style="color:#fbbf24">{{ last.actual_hours | round(0) | int }}</div>
+    <div class="kpi-lbl">Фактически, ч</div>
+  </div>
+  {% endif %}
+  <div class="kpi">
+    <div class="kpi-val" style="color:{% if last.unassigned > 0 %}var(--danger){% else %}var(--accent){% endif %}">{{ last.unassigned }}</div>
+    <div class="kpi-lbl">Не распределено</div>
+  </div>
+</div>
+
+<!-- Раздел 1: Динамика по версиям -->
+<div class="db-section">
+  <h2>Динамика по версиям</h2>
+  <div class="db-grid">
+    <div class="db-card">
+      <h3>Часы: доступно / назначено / фактически</h3>
+      <div class="db-canvas-wrap"><canvas id="chart-hours"></canvas></div>
+    </div>
+    <div class="db-card">
+      <h3>Фичи: всего активных / нераспределённых</h3>
+      <div class="db-canvas-wrap"><canvas id="chart-features"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- Раздел 2: Участники по версии -->
+<div class="db-section">
+  <h2>Распределение по участникам</h2>
+  <div class="db-controls">
+    <label>Версия:</label>
+    <select id="snap-select">
+      {% for s in snaps | reverse %}
+      <option value="{{ s.id }}">{{ s.version }} ({{ s.created_at }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="db-card" style="max-width:100%">
+    <h3 id="members-chart-title">Часы на участника</h3>
+    <div class="db-canvas-wrap-tall"><canvas id="chart-members"></canvas></div>
+  </div>
+</div>
+
+{% endif %}
+
+<script>
+var SNAPS = {{ snaps | tojson }};
+var MEMBERS_BY_SNAP = {{ members_by_snap | safe }};
+
+var ACCENT  = '#3dd68c';
+var BLUE    = '#60b4ff';
+var YELLOW  = '#fbbf24';
+var DANGER  = '#f05252';
+var MUTED   = '#6b8aaa';
+var SURFACE2= '#1a2e47';
+
+Chart.defaults.color = '#6b8aaa';
+Chart.defaults.borderColor = '#1e3550';
+Chart.defaults.font.family = 'ui-sans-serif, system-ui, sans-serif';
+Chart.defaults.font.size   = 11;
+
+var labels    = SNAPS.map(function(s){ return s.version; });
+var availH    = SNAPS.map(function(s){ return s.avail_hours; });
+var spentH    = SNAPS.map(function(s){ return s.spent_hours; });
+var actualH   = SNAPS.map(function(s){ return s.actual_hours; });
+var featTotal = SNAPS.map(function(s){ return s.features; });
+var featUn    = SNAPS.map(function(s){ return s.unassigned; });
+
+var lineOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 12 } } },
+  scales: {
+    x: { grid: { color: '#1e3550' } },
+    y: { grid: { color: '#1e3550' }, beginAtZero: true }
+  },
+  elements: { point: { radius: 4, hoverRadius: 6 } }
+};
+
+/* ── 1. Часы по версиям ── */
+new Chart(document.getElementById('chart-hours'), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Доступно, ч',   data: availH,  borderColor: BLUE,   backgroundColor: 'rgba(96,180,255,.12)', tension: 0.3, fill: true, borderWidth: 2 },
+      { label: 'Назначено, ч',  data: spentH,  borderColor: ACCENT, backgroundColor: 'rgba(61,214,140,.12)', tension: 0.3, fill: true, borderWidth: 2 },
+      { label: 'Фактически, ч', data: actualH, borderColor: YELLOW, backgroundColor: 'rgba(251,191,36,.10)', tension: 0.3, fill: false, borderWidth: 2, borderDash: [5,3], spanGaps: true },
+    ]
+  },
+  options: lineOpts
+});
+
+/* ── 2. Фичи по версиям ── */
+new Chart(document.getElementById('chart-features'), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      { label: 'Всего активных', data: featTotal, borderColor: BLUE,   backgroundColor: 'rgba(96,180,255,.12)', tension: 0.3, fill: true, borderWidth: 2 },
+      { label: 'Нераспределено', data: featUn,    borderColor: DANGER, backgroundColor: 'rgba(240,82,82,.10)',  tension: 0.3, fill: true, borderWidth: 2 },
+    ]
+  },
+  options: Object.assign({}, lineOpts, { scales: Object.assign({}, lineOpts.scales, { y: { grid: { color: '#1e3550' }, beginAtZero: true, ticks: { stepSize: 1 } } }) })
+});
+
+/* ── 3. Участники ── */
+var memberChart = null;
+
+function buildMemberChart(snapId) {
+  var members = MEMBERS_BY_SNAP[snapId] || [];
+  members = members.slice().sort(function(a,b){ return b.spent_hours - a.spent_hours; });
+
+  var names   = members.map(function(m){ return m.full_name; });
+  var spent   = members.map(function(m){ return Math.round(m.spent_hours * 10) / 10; });
+  var remain  = members.map(function(m){ return Math.max(0, Math.round(m.remaining_hours * 10) / 10); });
+  var over    = members.map(function(m){ return m.remaining_hours < 0 ? Math.abs(Math.round(m.remaining_hours * 10) / 10) : 0; });
+
+  if (memberChart) memberChart.destroy();
+
+  memberChart = new Chart(document.getElementById('chart-members'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        { label: 'Назначено, ч', data: spent,  backgroundColor: 'rgba(61,214,140,.5)',  borderColor: ACCENT, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'Остаток, ч',   data: remain, backgroundColor: 'rgba(96,180,255,.25)', borderColor: BLUE,   borderWidth: 1, borderRadius: 3 },
+        { label: 'Перегруз, ч',  data: over,   backgroundColor: 'rgba(240,82,82,.5)',   borderColor: DANGER, borderWidth: 1.5, borderRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 10 } } },
+      scales: {
+        x: { stacked: true, grid: { color: '#1e3550' }, beginAtZero: true },
+        y: { stacked: true, grid: { color: '#1e3550' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+var sel = document.getElementById('snap-select');
+if (sel) {
+  buildMemberChart(sel.value);
+  sel.addEventListener('change', function(){ buildMemberChart(this.value); });
+}
+</script>
+{% endblock %}

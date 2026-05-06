@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}История регрессов{% endblock %}
+{% block sse_toast %}{% endblock %}
+{% block sse_script %}{% endblock %}
+{% block nav_history %}active{% endblock %}
+
+{% block body %}
+<h1>История регрессов</h1>
+
+{% if snapshots %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8rem">Версия</th>
+        <th style="width:14rem">Примечание</th>
+        <th style="text-align:right;width:4rem">Участ-<br>ников</th>
+        <th style="text-align:right;width:3.5rem">Дней</th>
+        <th style="text-align:right;width:4.5rem">Доступ-<br>но, ч</th>
+        <th style="text-align:right;width:4.5rem">Назна-<br>чено, ч</th>
+        <th style="text-align:right;width:4.5rem">Факти-<br>чески, ч</th>
+        <th style="text-align:right;width:3rem">Фич</th>
+        <th style="text-align:right;width:4rem">Не рас-<br>пред.</th>
+        <th style="width:8rem;white-space:nowrap">Сохранено</th>
+        <th style="width:1%"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in snapshots %}
+      {% set snap = h.snapshot | fromjson %}
+      {% set t = snap.totals %}
+      {% set actual = t.actual_hours if (t.actual_hours is defined and t.actual_hours is not none) else '' %}
+      <tr id="hist-row-{{ h.id }}">
+        <!-- Версия: обычный вид -->
+        <td id="hist-ver-cell-{{ h.id }}">
+          <a href="/history/{{ h.id }}" style="font-weight:600" id="hist-ver-link-{{ h.id }}">{{ h.version }}</a>
+        </td>
+        <td class="muted" style="font-size:0.82rem;max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ h.note or '' }}">{{ h.note or '—' }}</td>
+        <td class="num">{{ t.members_count }}</td>
+        <td class="num">{{ t.total_avail_days | default(0) | round(1) }}</td>
+        <td class="num">{{ t.total_avail_hours | default(0) | round(1) }}</td>
+        <td class="num">{{ t.total_spent_hours | default(0) | round(1) }}</td>
+        <!-- Фактически ч: редактируемая ячейка -->
+        <td class="num" id="hist-actual-cell-{{ h.id }}">
+          {% if actual != '' %}
+          <strong style="color:#fbbf24" id="hist-actual-val-{{ h.id }}">{{ actual | round(1) }}</strong>
+          {% else %}
+          <span class="muted" id="hist-actual-val-{{ h.id }}">—</span>
+          {% endif %}
+        </td>
+        <td class="num">{{ t.features_count }}</td>
+        <td class="num">
+          {% if t.unassigned_count > 0 %}
+          <span style="color:var(--danger);font-weight:600">{{ t.unassigned_count }}</span>
+          {% else %}<span style="color:var(--accent)">0</span>{% endif %}
+        </td>
+        <td class="muted" style="font-size:0.82rem;white-space:nowrap">
+          {{ h.created_at.strftime('%d.%m.%Y %H:%M') }}
+        </td>
+        <td class="td-actions">
+          <div class="row-actions">
+            <a href="/history/{{ h.id }}" class="btn-icon" title="Просмотр">👁</a>
+            <button class="btn-icon" title="Редактировать"
+                    onclick="openEditModal('{{ h.id }}', '{{ h.version | e }}', '{{ actual }}')">✏️</button>
+            <form method="post" action="/history/{{ h.id }}/delete"
+                  onsubmit="return confirm('Удалить снимок «{{ h.version }}»?')">
+              <button type="submit" class="btn-icon btn-icon-del" title="Удалить">✕</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">📋</div>
+  <p>История пуста. Сохраните распределение с вкладки «Распределение».</p>
+</div>
+{% endif %}
+
+<!-- Модальное окно редактирования -->
+<div id="edit-hist-backdrop" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)" onclick="closeEditModal()"></div>
+<div id="edit-hist-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2001;width:min(90vw,26rem);background:var(--surface);border:1px solid var(--border);border-radius:0.75rem;box-shadow:0 24px 60px rgba(0,0,0,.5);padding:1.5rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+    <span style="font-weight:700;font-size:1rem">Редактировать снимок</span>
+    <button onclick="closeEditModal()" style="background:none;border:none;color:var(--muted);font-size:1.25rem;cursor:pointer;line-height:1;padding:0.15rem 0.4rem;border-radius:0.3rem" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✕</button>
+  </div>
+  <input type="hidden" id="edit-hist-id">
+  <div class="field">
+    <label style="display:block;font-size:.8125rem;font-weight:500;color:var(--muted);margin-bottom:.4rem">Версия <span style="color:var(--danger)">*</span></label>
+    <input type="text" id="edit-hist-version" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none">
+  </div>
+  <div class="field" style="margin-top:.85rem">
+    <label style="display:block;font-size:.8125rem;font-weight:500;color:var(--muted);margin-bottom:.4rem">Фактически затрачено, ч <span style="font-size:.75rem;font-weight:400">(необязательно)</span></label>
+    <input type="number" id="edit-hist-actual" min="0" step="0.5" style="width:100%;padding:.55rem .8rem;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.9375rem;outline:none">
+  </div>
+  <div id="edit-hist-error" style="display:none;color:#fca5a5;font-size:.82rem;margin-top:.5rem"></div>
+  <div style="display:flex;gap:.6rem;margin-top:1.25rem">
+    <button id="edit-hist-save-btn" class="btn btn-primary" onclick="doEditHistory()">Сохранить</button>
+    <button class="btn" onclick="closeEditModal()">Отмена</button>
+  </div>
+</div>
+
+<style>
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.4rem; height: 1.4rem; border-radius: 0.3rem;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 0.8rem; color: var(--muted);
+  transition: background .15s, color .15s; text-decoration: none;
+}
+.btn-icon:hover { background: var(--surface2); color: var(--text); text-decoration: none; }
+.btn-icon-del { color: #f05252 !important; }
+.btn-icon-del:hover { background: rgba(240,82,82,.12) !important; }
+.row-actions { display: flex; gap: 0.25rem; align-items: center; }
+
+/* Компактная таблица истории */
+.table-wrap table th { padding: 0.4rem 0.5rem; font-size: 0.68rem; }
+.table-wrap table td { padding: 0.35rem 0.5rem; font-size: 0.82rem; }
+</style>
+
+<script>
+function openEditModal(id, version, actual) {
+  document.getElementById('edit-hist-id').value      = id;
+  document.getElementById('edit-hist-version').value = version;
+  document.getElementById('edit-hist-actual').value  = actual;
+  document.getElementById('edit-hist-error').style.display = 'none';
+  document.getElementById('edit-hist-backdrop').style.display = 'block';
+  document.getElementById('edit-hist-modal').style.display    = 'block';
+  setTimeout(function(){ document.getElementById('edit-hist-version').focus(); }, 50);
+}
+function closeEditModal() {
+  document.getElementById('edit-hist-backdrop').style.display = 'none';
+  document.getElementById('edit-hist-modal').style.display    = 'none';
+}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeEditModal(); });
+
+function doEditHistory() {
+  var id      = document.getElementById('edit-hist-id').value;
+  var version = document.getElementById('edit-hist-version').value.trim();
+  var actual  = document.getElementById('edit-hist-actual').value.trim();
+  var errEl   = document.getElementById('edit-hist-error');
+  var btn     = document.getElementById('edit-hist-save-btn');
+  if (!version) {
+    errEl.textContent = 'Укажите версию'; errEl.style.display = 'block'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Сохранение…'; errEl.style.display = 'none';
+  var body = 'version=' + encodeURIComponent(version) + '&actual_hours=' + encodeURIComponent(actual);
+  fetch('/history/' + id + '/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: body
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (data.error) {
+      errEl.textContent = data.error; errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Сохранить'; return;
+    }
+    /* Обновляем строку без перезагрузки */
+    var linkEl = document.getElementById('hist-ver-link-' + id);
+    if (linkEl) linkEl.textContent = data.version;
+
+    var actualEl = document.getElementById('hist-actual-val-' + id);
+    if (actualEl) {
+      if (data.actual_hours !== null && data.actual_hours !== undefined) {
+        actualEl.outerHTML = '<strong style="color:#fbbf24" id="hist-actual-val-' + id + '">'
+          + parseFloat(data.actual_hours).toFixed(1) + '</strong>';
+      } else {
+        actualEl.outerHTML = '<span class="muted" id="hist-actual-val-' + id + '">—</span>';
+      }
+    }
+    closeEditModal();
+    btn.disabled = false; btn.textContent = 'Сохранить';
+  })
+  .catch(function() {
+    errEl.textContent = 'Ошибка сохранения'; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Сохранить';
+  });
+}
+</script>
+{% endblock %}

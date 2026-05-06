@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{% if member %}Редактирование участника{% else %}Новый участник{% endif %}{% endblock %}
+{% block nav_members %}active{% endblock %}
+{% block body %}
+<h1>{% if member %}Редактировать участника{% else %}Новый участник{% endif %}</h1>
+{% if error %}
+<div class="alert-error"><span>⚠</span> {{ error }}</div>
+{% endif %}
+<div class="card">
+  <form method="post" enctype="application/x-www-form-urlencoded"
+    action="{% if member %}{{ request.url_for('update_member', member_id=member.id) }}{% else %}{{ request.url_for('create_member') }}{% endif %}">
+    <div class="field">
+      <label for="m-name">Имя участника <span class="required">*</span></label>
+      <input type="text" id="m-name" name="full_name" required maxlength="200" autocomplete="off"
+        value="{{ form_name if form_name is defined else (member.full_name if member else '') }}">
+    </div>
+    <div class="field">
+      <label for="m-team">Команда</label>
+      <input type="text" id="m-team" name="team" maxlength="120"
+        placeholder="например Core, Mobile" autocomplete="off"
+        value="{{ form_team if form_team is defined else (member.team if member else '') }}">
+    </div>
+    <div class="field">
+      <label for="m-days">Доступных дней на регресс</label>
+      <input type="text" id="m-days" name="available_days" inputmode="decimal"
+        placeholder="например 5 или 2.5" autocomplete="off"
+        value="{{ form_days if form_days is defined else (member.available_days if member else '0') }}">
+    </div>
+    <div class="field">
+      <label>Профильный девайс</label>
+      {% set cur_device = form_device if form_device is defined else (member.device if member else '') %}
+      {% set cur_parts = cur_device.split(',') %}
+      <div class="dev-cb-group">
+        <label class="dev-cb-label dev-cb-global">
+          <input type="checkbox" class="dev-cb" value="global"
+            {% if 'global' in cur_parts %}checked{% endif %}>
+          <span class="dev-cb-pill">Г&nbsp;&nbsp;Глобальный</span>
+        </label>
+        <label class="dev-cb-label dev-cb-china">
+          <input type="checkbox" class="dev-cb" value="china"
+            {% if 'china' in cur_parts %}checked{% endif %}>
+          <span class="dev-cb-pill">К&nbsp;&nbsp;Китайский</span>
+        </label>
+        <label class="dev-cb-label dev-cb-vietnam">
+          <input type="checkbox" class="dev-cb" value="vietnam"
+            {% if 'vietnam' in cur_parts %}checked{% endif %}>
+          <span class="dev-cb-pill">В&nbsp;&nbsp;Вьетнам</span>
+        </label>
+      </div>
+      <input type="hidden" name="device" id="device-hidden" value="{{ cur_device }}">
+    </div>
+
+    <style>
+    .dev-cb-group { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.25rem; }
+    .dev-cb-label { display: flex; align-items: center; gap: 0; cursor: pointer; }
+    .dev-cb-label input[type="checkbox"] { display: none; }
+    .dev-cb-pill {
+      display: inline-flex; align-items: center;
+      padding: 0.3rem 0.85rem;
+      border-radius: 999px;
+      border: 1.5px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 0.82rem; font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      user-select: none;
+    }
+    .dev-cb-label.dev-cb-global  input:checked ~ .dev-cb-pill { background: #1a3a5c; color: #60b4ff; border-color: rgba(96,180,255,.4); }
+    .dev-cb-label.dev-cb-china   input:checked ~ .dev-cb-pill { background: #4a1a1a; color: #ff7070; border-color: rgba(255,112,112,.4); }
+    .dev-cb-label.dev-cb-vietnam input:checked ~ .dev-cb-pill { background: #2a3a1a; color: #90d860; border-color: rgba(144,216,96,.4); }
+    .dev-cb-pill:hover { border-color: var(--accent); }
+    </style>
+
+    <script>
+    (function() {
+      var cbs = document.querySelectorAll('.dev-cb');
+      var hidden = document.getElementById('device-hidden');
+      function sync() {
+        hidden.value = Array.from(cbs).filter(function(c){return c.checked;}).map(function(c){return c.value;}).join(',');
+      }
+      cbs.forEach(function(cb){ cb.addEventListener('change', sync); });
+    }());
+    </script>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Сохранить</button>
+      <a class="btn" href="/members">К списку</a>
+      {% if member %}
+      <button type="submit" class="btn btn-danger" style="margin-left:auto"
+        formaction="/members/{{ member.id }}/delete" formmethod="post" formnovalidate
+        onclick="return confirm('Удалить участника «' + document.getElementById('m-name').value + '»?');">Удалить</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

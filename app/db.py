@@ -11,9 +11,24 @@ os.makedirs(_DATA_DIR, exist_ok=True)
 
 _DB_PATH = os.path.join(_DATA_DIR, "features.db")
 
-# Если БД ещё не существует (первый запуск на Railway Volume),
+# Если БД пустая или отсутствует (первый запуск на Railway Volume) —
 # копируем семенную БД из репозитория
-if not os.path.exists(_DB_PATH):
+def _db_is_empty(path: str) -> bool:
+    """Возвращает True если файл не существует или не содержит таблицы features."""
+    if not os.path.exists(path) or os.path.getsize(path) < 1024:
+        return True
+    try:
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(path) as _c:
+            tables = {r[0] for r in _c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "features" not in tables:
+                return True
+            count = _c.execute("SELECT COUNT(*) FROM features").fetchone()[0]
+            return count == 0
+    except Exception:
+        return True
+
+if _db_is_empty(_DB_PATH):
     import shutil
     _SEED = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data_seed", "features.db")
     if os.path.exists(_SEED):
